@@ -1,0 +1,7 @@
+.pytest_cache
+.zed
+.terraform
+.python_packages
+.terraform.lock.hcl
+function.zip
+unit_test
