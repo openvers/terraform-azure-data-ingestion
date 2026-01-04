@@ -14,7 +14,7 @@ variable "SECURITY_GROUP_ID" {
 ## These variables have defaults and may be overridden
 ## ---------------------------------------------------------------------------------------------------------------------
 
-variable "function_name" {
+variable "function_app_name" {
   type        = string
   description = "Azure Function App Name"
   default     = "example-app"

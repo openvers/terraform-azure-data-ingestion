@@ -94,14 +94,16 @@ resource "azurerm_resource_group" "this" {
 ## - Additional configuration may be required for Azure Function integration and IAM roles depending on your use case.
 ## ---------------------------------------------------------------------------------------------------------------------
 module "data_lake" {
-  source = "github.com/openvers/terraform-azure-data-lake.git?ref=1437474e21ebf06ed49f3a3354ec6eb2f922163e"
+  source = "github.com/openvers/terraform-azure-data-lake.git?ref=aa1e56544f975993abdb5739bad538c20a48c2b2"
 
-  bronze_bucket_name  = "${local.suffix}-bronze"
-  silver_bucket_name  = "${local.suffix}-silver"
-  gold_bucket_name    = "${local.suffix}-gold"
-  key_vault_name      = "${replace(local.suffix, " ", "-")}-datalake-akv"
-  security_group_id   = var.SECURITY_GROUP_ID
-  resource_group_name = azurerm_resource_group.this.name
+  bronze_bucket_name                     = "${local.suffix}-bronze"
+  silver_bucket_name                     = "${local.suffix}-silver"
+  gold_bucket_name                       = "${local.suffix}-gold"
+  key_vault_name                         = "${replace(local.suffix, " ", "-")}-datalake-akv"
+  security_group_id                      = var.SECURITY_GROUP_ID
+  resource_group_name                    = azurerm_resource_group.this.name
+  azure_storage_account_tier             = "Standard"
+  azure_storage_account_replication_type = "GRS"
 
   providers = {
     azurerm.auth_session = azurerm.auth_session
@@ -116,7 +118,7 @@ module "data_lake" {
 ## This Function Application is also configured to log to Azure Applications Insights for debug purposes.
 ##
 ## Parameters:
-## - `function_name`: Azure Function Application name.
+## - `function_app_name`: Azure Function Application name.
 ## - `trigger_bucket_name`: ADLS trigger bucket name.
 ## - `trigger_bucket_access_key`: ADLS trigger bucket shared access key.
 ## - `resource_group_name`: Azure Resource Group name.
@@ -126,19 +128,25 @@ module "data_lake" {
 module "azure_function_application" {
   source = "../../"
 
-  function_name           = "${var.function_name}-http-${local.suffix}"
-  function_bucket_name    = "${var.function_name}-${local.suffix}-adls"
-  dependency_install_path = "./source"
-  archive_path            = "./source/function.zip"
-  resource_group_name     = azurerm_resource_group.this.name
-  security_group_id       = var.SECURITY_GROUP_ID
-  key_vault_id            = module.data_lake.azure_key_vault_id
-  key_name                = module.data_lake.azure_key_vault_key
+  function_app_name    = "${var.function_app_name}-http-${local.suffix}"
+  function_bucket_name = "${var.function_app_name}-${local.suffix}-adls"
+  resource_group_name  = azurerm_resource_group.this.name
+  security_group_id    = var.SECURITY_GROUP_ID
+  key_vault_id         = module.data_lake.azure_key_vault_id
+  key_name             = module.data_lake.azure_key_vault_key
 
-  app_settings = {
-    OUTPUT_BUCKET_NAME = module.data_lake.bronze_bucket_name
-    OUTPUT_BUCKET_KEY  = module.data_lake.bronze_bucket_key
-  }
+  function_apps = [
+    {
+      function_name           = "main"
+      dependency_install_path = "./source"
+      archive_path            = "./source/function.zip"
+      app_settings = {
+        OUTPUT_BUCKET_NAME           = module.data_lake.bronze_bucket_name
+        OUTPUT_BUCKET_CONTAINER_NAME = module.data_lake.bronze_bucket_container_name
+        OUTPUT_BUCKET_KEY            = module.data_lake.bronze_bucket_key
+      }
+    }
+  ]
 
   providers = {
     azurerm.auth_session = azurerm.auth_session

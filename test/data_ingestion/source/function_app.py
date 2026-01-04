@@ -12,12 +12,14 @@ scalable and event-based solutions on Azure.
 import logging
 import os
 import sys
+import uuid
 
 import adlfs
 import azure.functions as func
 
 # Environment Variables
 OUTPUT_BUCKET = os.getenv("OUTPUT_BUCKET_NAME")
+OUTPUT_BUCKET_CONTAINER_NAME = os.getenv("OUTPUT_BUCKET_CONTAINER_NAME")
 OUTPUT_BUCKET_KEY = os.getenv("OUTPUT_BUCKET_KEY", None)
 
 # Setup
@@ -42,17 +44,16 @@ def extract_file_from_req(request: func.HttpRequest):
     except Exception as e:
         logging.error(f"Error processing request: {e}")
         return func.HttpResponse(
-            "An error occurred while uploading the file.", status_code=400
+            f"An error occurred while uploading the file. {str(e)}", status_code=400
         )
 
-    return file_bytes, file_name
+    logging.debug(f"Extracted file '{file_name}' with size {len(file_bytes)} bytes.")
+    return file_bytes, os.path.join(OUTPUT_BUCKET_CONTAINER_NAME, file_name)
 
 
-@app.route(route="uploadfile")
-@app.blob_output(
-    arg_name="outputBlob", path="mycontainer/{name}", connection="AzureWebJobsStorage"
-)
-def uploadfile(req: func.HttpRequest, outputBlob: func.Out[bytes]) -> func.HttpResponse:
+@app.function_name(name="example-function")
+@app.route(route="main")
+def main(req: func.HttpRequest) -> func.HttpResponse:
     """
     Uploads a file to Azure Blob Storage.
 
@@ -65,17 +66,26 @@ def uploadfile(req: func.HttpRequest, outputBlob: func.Out[bytes]) -> func.HttpR
     """
     logging.info("Python HTTP trigger function processed a request.")
 
-    file_bytes, file_name = extract_file_from_req(req)
-    # Write the file content to the output binding
-    # outputBlob.set(file_bytes)
-    fs = adlfs.AzureBlobFileSystem(
-        account_name=OUTPUT_BUCKET, account_key=OUTPUT_BUCKET_KEY
-    )
+    try:
+        file_bytes, file_name = extract_file_from_req(req)
 
-    with fs.open(file_name, "wb") as f:
-        f.write(file_bytes)
+        logging.debug(
+            f"Establishing Azure Blob Storage connection to {OUTPUT_BUCKET}..."
+        )
+        fs = adlfs.AzureBlobFileSystem(
+            account_name=OUTPUT_BUCKET, account_key=OUTPUT_BUCKET_KEY
+        )
 
-    # Return a success response
-    return func.HttpResponse(
-        f"File '{file_name}' uploaded successfully to mycontainer.", status_code=200
-    )
+        logging.debug(f"Writing file '{file_name}' with size {len(file_bytes)} bytes.")
+        with fs.open(file_name, "wb") as f:
+            f.write(file_bytes)
+
+        # Return a success response
+        return func.HttpResponse(
+            f"File '{file_name}' uploaded successfully to mycontainer.", status_code=200
+        )
+    except Exception as e:
+        logging.error(f"Error processing request: {e}")
+        return func.HttpResponse(
+            f"An error occurred while uploading the file. {str(e)}", status_code=400
+        )

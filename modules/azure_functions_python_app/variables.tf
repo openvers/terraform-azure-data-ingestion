@@ -3,14 +3,34 @@
 ## These variables are expected to be passed in by the operator
 ## ---------------------------------------------------------------------------------------------------------------------
 
-variable "function_name" {
+variable "function_app_name" {
   type        = string
   description = "Azure Function App Name"
+}
+
+variable "function_name" {
+  type        = string
+  description = "Azure Function Name. This must match the folder name containing the function code."
 }
 
 variable "function_bucket_name" {
   type        = string
   description = "Azure Function Storage Account Bucket Name"
+}
+
+variable "function_bucket_container_name" {
+  type        = string
+  description = "Azure Function Storage Account Container Name"
+}
+
+variable "function_bucket_connection" {
+  type        = string
+  description = "Azure Function Storage Account Connection String"
+}
+
+variable "function_bucket_key" {
+  type        = string
+  description = "Azure Function Storage Account Key"
 }
 
 variable "resource_group_name" {
@@ -28,9 +48,24 @@ variable "key_vault_id" {
   description = "The ID of the Key Vault to use for customer-managed encryption."
 }
 
+variable "app_service_plan_id" {
+  type        = string
+  description = "Azure Service App Plan ID"
+}
+
 variable "key_name" {
   type        = string
   description = "The name of the Key Vault Key to use for customer-managed encryption."
+}
+
+variable "application_insights_connection_string" {
+  type        = string
+  description = "The connection string for the Application Insights instance."
+}
+
+variable "application_insights_key" {
+  type        = string
+  description = "The key for the Application Insights instance."
 }
 
 ## ---------------------------------------------------------------------------------------------------------------------
@@ -44,22 +79,10 @@ variable "python_version" {
   default     = "3.10"
 }
 
-variable "service_plan_name" {
-  type        = string
-  description = "Azure Service Plan Name"
-  default     = "example-function-service-plan"
-}
-
-variable "service_plan_os_type" {
-  type        = string
-  description = "Azure Service Plan OS Type"
-  default     = "Linux"
-}
-
-variable "service_plan_sku_type" {
-  type        = string
-  description = "Azure Service Plan SKU Type"
-  default     = "B1"
+variable "function_always_on" {
+  type        = bool
+  description = "Azure Function Always On"
+  default     = true
 }
 
 variable "function_container_name" {

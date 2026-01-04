@@ -23,7 +23,16 @@ terraform {
 ## ---------------------------------------------------------------------------------------------------------------------
 resource "null_resource" "this" {
   provisioner "local-exec" {
-    command = "pip install -r ${var.dependency_install_path}/requirements.txt --upgrade --target ${var.dependency_install_path}/.python_packages/lib/site-packages"
+    command = <<EOF
+    docker run --rm \
+      -v "${var.dependency_install_path}/":/app \
+      mcr.microsoft.com/azure-functions/python:4-python3.10 \
+      bash -c "
+        pip install --upgrade pip &&
+        pip install -r /app/requirements.txt \
+          --target /app/.python_packages/lib/site-packages
+      "
+    EOF
   }
 }
 
@@ -65,7 +74,8 @@ data "archive_file" "this" {
 ## - `source`: File path to function archive source file.
 ## ---------------------------------------------------------------------------------------------------------------------
 resource "azurerm_storage_blob" "this" {
-  provider = azurerm.auth_session
+  provider   = azurerm.auth_session
+  depends_on = [data.archive_file.this]
 
   type                   = "Block"
   name                   = reverse(split("/", var.archive_path))[0]

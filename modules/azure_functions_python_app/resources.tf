@@ -19,35 +19,6 @@ locals {
   })
 }
 
-## ---------------------------------------------------------------------------------------------------------------------
-## FUNCTION BUCKET MODULE
-##
-## This module will create an ADLS Bucket to store the Azure Function source code, and configure access to a specific
-## AD group.
-##
-## Parameters:
-## - `bucket_name`: ADLS bucket name.
-## - `container_name`: ADLS container name.
-## - `resource_group_name`: Azure Resource Group name.
-## - `resource_group_location`: Azure Resource Group location.
-## - `security_group_id`: Azure AD Security Group to allow access.
-## ---------------------------------------------------------------------------------------------------------------------
-module "function_bucket" {
-  source = "github.com/openvers/terraform-azure-data-lake.git//modules/adls_bucket?ref=0bfe41e34f3effcb40d361792b50fa2e77a0d5de"
-
-  bucket_name                = var.function_bucket_name
-  container_name             = var.function_container_name
-  azure_storage_account_kind = "BlockBlobStorage"
-  resource_group_name        = data.azurerm_resource_group.this.name
-  security_group_id          = var.security_group_id
-  key_vault_id               = var.key_vault_id
-  key_name                   = var.key_name
-
-  providers = {
-    azurerm.auth_session = azurerm.auth_session
-  }
-}
-
 
 ## ---------------------------------------------------------------------------------------------------------------------
 ## FUNCTION SOURCE MODULE
@@ -63,9 +34,9 @@ module "function_bucket" {
 module "function_source" {
   source = "../azure_functions_zip"
 
-  function_bucket_name       = module.function_bucket.bucket_name
-  function_container_name    = module.function_bucket.bucket_container_name
-  function_bucket_connection = module.function_bucket.bucket_connection
+  function_bucket_name       = var.function_bucket_name
+  function_container_name    = var.function_bucket_container_name
+  function_bucket_connection = var.function_bucket_connection
   resource_group_name        = data.azurerm_resource_group.this.name
   security_group_id          = var.security_group_id
   dependency_install_path    = var.dependency_install_path
@@ -74,52 +45,6 @@ module "function_source" {
   providers = {
     azurerm.auth_session = azurerm.auth_session
   }
-}
-
-## ---------------------------------------------------------------------------------------------------------------------
-## AZURERM SERVICE PLAN RESOURCE
-##
-## Configure a Service Plan for Function App Specs
-## and Performance.
-##
-## Note: Free Tier is no longer an option.
-##
-## Parameters:
-## - `name`: Azure Functions Service Plan name.
-## - `resource_grioup_name`: Azure Resource Group name.
-## - `location`: Azure Resource Group location.
-## - `os_type`: Azure Functions Operating System.
-## - `sku_name`: Azure Functions sku type.
-## ---------------------------------------------------------------------------------------------------------------------
-resource "azurerm_service_plan" "this" {
-  provider = azurerm.auth_session
-
-  name                = var.service_plan_name
-  resource_group_name = data.azurerm_resource_group.this.name
-  location            = data.azurerm_resource_group.this.location
-  os_type             = var.service_plan_os_type
-  sku_name            = var.service_plan_sku_type
-}
-
-
-## ---------------------------------------------------------------------------------------------------------------------
-## AZURERM APPLICATION INSIGHTS RESOURCE
-##
-## Configure Application Insights to monitor Function executions and logs. Not configured by default.
-##
-## Parameters:
-## - `name`: Azure Application Insights name.
-## - `resource_grioup_name`: Azure Resource Group name.
-## - `location`: Azure Resource Group location.
-## - `application_type`: Azure Application Insights type.
-## ---------------------------------------------------------------------------------------------------------------------
-resource "azurerm_application_insights" "this" {
-  provider = azurerm.auth_session
-
-  name                = "${var.service_plan_name}-app-insights"
-  resource_group_name = data.azurerm_resource_group.this.name
-  location            = data.azurerm_resource_group.this.location
-  application_type    = "other"
 }
 
 
@@ -157,17 +82,18 @@ resource "azurerm_application_insights" "this" {
 resource "azurerm_linux_function_app" "this" {
   provider = azurerm.auth_session
 
-  name                = var.function_name
+  name                = var.function_app_name
   resource_group_name = data.azurerm_resource_group.this.name
   location            = data.azurerm_resource_group.this.location
-  service_plan_id     = azurerm_service_plan.this.id
+  service_plan_id     = var.app_service_plan_id
 
-  storage_account_name       = module.function_bucket.bucket_name
-  storage_account_access_key = module.function_bucket.bucket_key
+  storage_account_name       = var.function_bucket_name
+  storage_account_access_key = var.function_bucket_key
 
   site_config {
-    application_insights_connection_string = azurerm_application_insights.this.connection_string
-    application_insights_key               = azurerm_application_insights.this.instrumentation_key
+    application_insights_connection_string = var.application_insights_connection_string
+    application_insights_key               = var.application_insights_key
+    always_on                              = var.function_always_on
 
     application_stack {
       python_version = var.python_version
@@ -175,4 +101,11 @@ resource "azurerm_linux_function_app" "this" {
   }
 
   app_settings = local.app_settings
+}
+
+data "azurerm_function_app_host_keys" "this" {
+  provider = azurerm.auth_session
+
+  name                = azurerm_linux_function_app.this.name
+  resource_group_name = data.azurerm_resource_group.this.name
 }

@@ -12,6 +12,7 @@ If running Python > 3.12, ensure that setup tools is installed globally
 sudo apt install python3-setuptools
 ```
 
+Azure Function App dependencies are built with MS Images to ensure host compatibility. Please ensure docker is installed and configured correctly.
 
 
 ## Usage
