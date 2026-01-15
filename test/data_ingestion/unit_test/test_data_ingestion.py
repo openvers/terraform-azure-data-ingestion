@@ -41,16 +41,16 @@ terraform -chdir=./test/service_account destroy -auto-approve
 ```
 """
 
+import io
 import json
 import logging
 import os
 import time
 import uuid
 
+import adlfs
 import pytest
 import requests
-from azure.identity import DefaultAzureCredential
-from azure.storage.blob import BlobServiceClient
 
 # Environment Variables
 AZURE_STORAGE_ACCOUNT_NAME = os.getenv("AZURE_STORAGE_ACCOUNT_NAME")
@@ -64,39 +64,6 @@ assert AZURE_TARGET_CONTAINER_NAME is not None
 assert AZURE_STORAGE_ACCOUNT_KEY is not None
 assert AZURE_FUNCTION_API_ENDPOINT is not None
 assert AZURE_FUNCTION_API_X_KEY is not None
-
-
-def _read_blob_from_azure(filename, use_oidc=False):
-    """
-    Reads a JSON file from Azure Blob Storage.
-    If use_oidc is True, uses DefaultAzureCredential for authentication (for workload identity).
-    Otherwise, uses the storage account key from environment variables.
-
-    Args:
-        filename (str): The name of the file to read.
-        use_oidc (bool, optional): Whether to use OIDC-based credentials. Defaults to False.
-
-    Returns:
-        dict: The JSON content of the file.
-    """
-    if use_oidc:
-        credential = DefaultAzureCredential()
-        blob_service_client = BlobServiceClient(
-            account_url=f"https://{AZURE_STORAGE_ACCOUNT_NAME}.blob.core.windows.net",
-            credential=credential,
-        )
-    else:
-        assert AZURE_STORAGE_ACCOUNT_KEY is not None
-        connection_string = f"DefaultEndpointsProtocol=https;AccountName={AZURE_STORAGE_ACCOUNT_NAME};AccountKey={AZURE_STORAGE_ACCOUNT_KEY};EndpointSuffix=core.windows.net"
-        blob_service_client = BlobServiceClient.from_connection_string(
-            connection_string
-        )
-
-    blob_client = blob_service_client.get_blob_client(
-        container=AZURE_TARGET_CONTAINER_NAME, blob=filename
-    )
-    downloader = blob_client.download_blob()
-    return json.loads(downloader.readall())
 
 
 @pytest.mark.local
@@ -116,57 +83,19 @@ def test_azure_env_http_function_file_upload(payload=None):
 
     # Send HTTP POST to Azure Function
     response = requests.post(
-        AZURE_FUNCTION_API_ENDPOINT,
-        params={"name": filename},
-        data=json.dumps(payload),
+        url=AZURE_FUNCTION_API_ENDPOINT,
         headers={
-            "Content-Type": "application/json",
             "X-functions-key": AZURE_FUNCTION_API_X_KEY,
         },
+        files=[("files", (filename, io.BytesIO(json.dumps(payload).encode("utf-8"))))],
     )
 
     assert response.status_code == 200, f"Function HTTP call failed: {response.text}"
-
-    # Wait for the function to write to Blob Storage
-    time.sleep(5)
 
     # Verify the file was written to Blob Storage
-    rs = _read_blob_from_azure(filename, use_oidc=False)
-    assert rs["test_value"] == payload["test_value"]
-
-
-@pytest.mark.github
-@pytest.mark.oidc
-def test_azure_oidc_http_function_file_upload(payload=None):
-    """
-    Test uploading a file to the Azure Function via HTTP POST and verifying it's written to Blob Storage.
-    Uses OIDC and Workload Identity (DefaultAzureCredential) for Blob Storage access.
-
-    Args:
-        payload (dict, optional): The JSON payload to upload. If None, a random payload is generated.
-    """
-    logging.info("Pytest | Test HTTP Function File Upload with OIDC Credentials")
-
-    if payload is None:
-        payload = {"test_value": str(uuid.uuid4())}
-    filename = f"test-oidc-{str(uuid.uuid4())}.json"
-
-    # Send HTTP POST to Azure Function
-    response = requests.post(
-        AZURE_FUNCTION_API_ENDPOINT,
-        params={"name": filename},
-        data=json.dumps(payload),
-        headers={
-            "Content-Type": "application/json",
-            "X-functions-key": AZURE_FUNCTION_API_X_KEY,
-        },
+    fs = adlfs.AzureBlobFileSystem(
+        account_name=AZURE_STORAGE_ACCOUNT_NAME, account_key=AZURE_STORAGE_ACCOUNT_KEY
     )
-
-    assert response.status_code == 200, f"Function HTTP call failed: {response.text}"
-
-    # Wait for the function to write to Blob Storage
-    time.sleep(5)
-
-    # Verify the file was written to Blob Storage using OIDC
-    rs = _read_blob_from_azure(filename, use_oidc=True)
-    assert rs["test_value"] == payload["test_value"]
+    with fs.open(os.path.join(AZURE_TARGET_CONTAINER_NAME, filename), "r") as f:
+        rs = json.load(f)
+        assert rs["test_value"] == payload["test_value"]

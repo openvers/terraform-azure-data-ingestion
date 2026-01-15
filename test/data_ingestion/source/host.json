@@ -7,5 +7,10 @@
   "concurrency": {
     "dynamicConcurrencyEnabled": true,
     "snapshotPersistenceEnabled": true
+  },
+  "extensions": {
+    "http": {
+      "routePrefix": ""
+    }
   }
 }

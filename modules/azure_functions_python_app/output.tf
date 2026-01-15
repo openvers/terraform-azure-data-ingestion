@@ -5,7 +5,7 @@ output "function_default_hostname" {
 
 output "function_api_endpoint" {
   description = "Azure Function Application API Endpoint"
-  value       = "${azurerm_linux_function_app.this.default_hostname}/api/${var.function_name}"
+  value       = azurerm_linux_function_app.this.default_hostname
 }
 
 output "function_default_x_key" {

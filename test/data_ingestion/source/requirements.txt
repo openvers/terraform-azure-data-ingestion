@@ -2,3 +2,4 @@ azure-functions
 adlfs==2025.8.0
 cffi==1.16.0
 cryptography==41.0.7
+flask
